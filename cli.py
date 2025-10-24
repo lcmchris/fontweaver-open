@@ -1,5 +1,6 @@
 import typer
 import fontweaver.sampler as sampler
+
 import fontweaver.process_dataset as process
 import fontweaver.train as train
 import logging

@@ -134,9 +134,6 @@ class FontweaverTransformer(nn.Module):
                 depth=cfg.num_layers,
                 heads=cfg.nhead,
                 attn_flash=True,
-                layer_dropout=0.1,
-                attn_dropout=0.1,
-                ff_dropout=0.1,
             ).cuda()
             if torch.cuda.is_available()
             else Decoder(
@@ -144,9 +141,6 @@ class FontweaverTransformer(nn.Module):
                 depth=cfg.num_layers,
                 heads=cfg.nhead,
                 attn_flash=False,
-                layer_dropout=0.1,
-                attn_dropout=0.1,
-                ff_dropout=0.1,
             )
         )
 
@@ -155,6 +149,8 @@ class FontweaverTransformer(nn.Module):
 
 
 class TextEmbedder:
+    """Uses BERT to tokenize and embed text inputs"""
+
     def __init__(
         self,
     ):
@@ -178,12 +174,9 @@ class TextEmbedder:
         return input_ids, attn_mask_ids
 
     def embed_tokens(self, text_tokens: torch.Tensor):
-        # Predict hidden states features for each layer
         text_tokens = text_tokens.to(self.bert.device)
         with torch.no_grad():
             batch_embeddings = self.bert.embeddings(text_tokens)
-        # prepare for transformers:
-        # -> (sequence_length, batch_size, embedding_dimension)
         return batch_embeddings
 
     def get_text_emeddings(self, text: str) -> tuple[torch.Tensor, torch.Tensor]:
@@ -193,6 +186,12 @@ class TextEmbedder:
 
 
 class FontweaverModel(pl.LightningModule):
+    """Main Model with:
+    - Text Embedder
+    - Font Embeddings
+    - Transformer
+    - Output layer back to functional commands size"""
+
     def __init__(
         self,
     ) -> None:
@@ -246,26 +245,14 @@ class FontweaverModel(pl.LightningModule):
     def configure_optimizers(
         self,
     ) -> tuple[list[torch.optim.Optimizer], list[Any]]:
-        print(f"creating an optimizer with LR: {cfg.learning_rate}")
-
-        optimizer = bnb.optim.AdamW8bit(self.parameters(), lr=cfg.learning_rate)
+        """Create a AdamW optimizer and a cosine annealing learning rate scheduler."""
+        optimizer = bnb.optim.adamw.AdamW(self.parameters(), lr=cfg.learning_rate)
         total_steps = self.trainer.estimated_stepping_batches
         scheduler = {
-            # "scheduler": get_linear_schedule_with_warmup(
-            #     optimizer,
-            #     num_warmup_steps=1000,
-            #     num_training_steps=total_steps,
-            # ),
-            # "scheduler": CosineAnnealingWarmRestarts(
-            #     optimizer,
-            #     T_0=5000,
-            #     T_mult=2,
-            #     last_epoch=-1,
-            # ),
             "scheduler": CosineAnnealingLR(
                 optimizer,
                 T_max=int(total_steps),
-                eta_min=cfg.learning_rate / 10,
+                eta_min=cfg.learning_rate / 5,
                 last_epoch=-1,
             ),
             "interval": "step",
@@ -273,6 +260,7 @@ class FontweaverModel(pl.LightningModule):
         return [optimizer], [scheduler]
 
     def make_a_step(self, batch) -> torch.Tensor:
+        """"""
         font_tokens = batch["font_tokens"]
         text_embeddings = batch["text_embeddings"]
         text_attn_mask_ids = batch["text_attn_mask_ids"]
@@ -304,6 +292,7 @@ class FontweaverModel(pl.LightningModule):
 
         font_embeddings = self.font_embedder(font_tokens)
 
+        # start of sequence token - bump one ahead
         sos_value = 0.42
         sos_token = torch.full(
             (batch_size, 1, cfg.d_model), sos_value, device=self.device
@@ -312,20 +301,9 @@ class FontweaverModel(pl.LightningModule):
             [sos_token, text_embeddings, font_embeddings[:, :-1, :]], dim=1
         )
 
-        # mask padding and special tokens
-        font_attn_mask_ids = (
-            font_tokens != self.font_codec.pad_token
-            # | torch.isin(
-            #     font_tokens,
-            #     torch.tensor(self.font_codec.causal_masking_tokens).to(cfg.device),
-            # )
-            # | torch.isin(
-            #     font_tokens,
-            #     torch.tensor(self.font_codec.causal_filling_tokens).to(cfg.device),
-            # )
-        )
+        font_attn_mask_ids = font_tokens != self.font_codec.pad_token
 
-        # For attn_mask Do not attend = True, without the sos token.
+        # For attn_mask Do not attend = True, without the sos token. We do not want to attend to padding tokens.
         full_attn_mask_ids = torch.cat(
             [
                 text_attn_mask_ids,
@@ -340,7 +318,6 @@ class FontweaverModel(pl.LightningModule):
         )
 
         logits = self.to_logits(output)
-        text_probabilities = logits[:, : cfg.max_text_tokens, :]
         font_probabilities = logits[:, cfg.max_text_tokens :, :]
         return font_probabilities
 

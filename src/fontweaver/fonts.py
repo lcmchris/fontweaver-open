@@ -293,6 +293,7 @@ class FontCodec:
         font_tokens_dict: dict[str, torch.Tensor],
         num_combined_glyphs: int = 2,
     ) -> list[torch.Tensor]:
+        """Splits font into sequentially group of glyphs."""
         font_tokens_dict_num = {
             idx: path for idx, (_, path) in enumerate(font_tokens_dict.items())
         }

@@ -51,7 +51,7 @@ def main():
         callbacks=[
             checkpoint_callback,
             lr_monitor,
-            SamplingCallback(sample_every_epoch=3),
+            SamplingCallback(sample_every_epoch=2),
         ],
         devices=-1 if cfg.device == "cuda" else "auto",
         logger=TensorBoardLogger(ROOT_DIR / "logs", name=cfg.experiment_name),
@@ -73,3 +73,7 @@ def main():
     )
 
     logging.info("Training complete.")
+
+
+if __name__ == "__main__":
+    main()

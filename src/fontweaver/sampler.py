@@ -45,7 +45,7 @@ class SamplingCallback(pl.Callback):
                     exporter=ExportLocal(
                         out_folder=Path(trainer.log_dir) / "samples",
                     ),
-                    temperature=0.8,
+                    temperature=1.0,
                     strategy="multinomial",
                 )
                 text = "Clean"
@@ -279,14 +279,7 @@ class FontweaverSampler:
         elif self.strategy == "greedy":
             probabilities = torch.softmax(logit, dim=0)
             max_index = torch.argmax(probabilities, dim=0)
-        elif self.strategy == "topknuc":
-            # Top-K and/or Nucleus Filtering
-            top_k = 10
-            top_p = 0.9
-            logit = top_k_top_p_filtering(logit, top_k=top_k, top_p=top_p)
 
-            probabilities = torch.softmax(logit, dim=0)
-            max_index = torch.multinomial(probabilities, num_samples=1)
         else:
             raise ValueError(f"Unknown type {self.strategy}")
 
@@ -492,18 +485,10 @@ class FontweaverSampler:
         return save_path
 
 
-DEFAULT_SAMPLE_TEXTS = [
-    "Elegant",
-    "Clean",
-    "Authoritative",
-    "Dynamic",
-]
-
-
 app = typer.Typer()
 
 
-@app.command()
+@app.callback(invoke_without_command=True)
 def sample_font(text: str):
     logging.basicConfig(
         level=logging.INFO,
@@ -511,14 +496,12 @@ def sample_font(text: str):
     )
     logging.info(f"Sampling font for text: {text}")
     output = OutputPNG()
-    latest = (ROOT_DIR / "logs" / cfg.experiment_name).iterdir()
+    latest = (ROOT_DIR / "logs" / "version_4").iterdir()
     latest_dir = sorted(latest, key=lambda x: x.stat().st_mtime, reverse=True)[0]
     logging.info(f"Latest dir: {latest_dir}")
 
     model = FontweaverModel.load_from_checkpoint(
-        checkpoint_path=latest_dir
-        / "checkpoints"
-        / "epoch=19-step=3160.ckpt",  # "last.ckpt",
+        checkpoint_path=latest_dir / "checkpoints" / "last.ckpt",
         map_location=cfg.device,
     )
     model.eval()

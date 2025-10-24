@@ -2,16 +2,12 @@ from dataclasses import dataclass
 
 import torch
 from pathlib import Path
-from typing import Literal
-import string
 
 ROOT_DIR = Path(__file__).parent.parent.parent.absolute()
 
 
 @dataclass
 class FontweaverConfig:
-    env: Literal["dev", "prod"]
-
     # Preprocessing parameters
     experiment_name: str
     experiment_desc: str
@@ -47,26 +43,23 @@ class FontweaverConfig:
 
 
 base_config = FontweaverConfig(
-    env="dev",
     experiment_name="fonts-and-ai",
     experiment_desc="Fonts and Ai.",
-    # raw_dataset="data/raw",
-    # desc_path="data/gemma-adjectives",
     dataset_path="2025-10-23-fonts-and-ai-demo",
+    glyphs=["a", "b", "c"],  # List of glyphs to include in training
+    num_combined_glyphs=2,  # Number of glyph sequences to combine as a sample
     d_model=512,
-    nhead=2,
-    num_layers=4,
-    max_text_tokens=4,
+    nhead=4,
+    num_layers=8,
+    max_text_tokens=4,  # Number of text tokens to included
     max_glyph_tokens=256,
-    glyphs=["a", "b", "c"],  # list(string.ascii_letters),
-    num_combined_glyphs=2,
     learning_rate=0.001,
     batch_size=16,
     font_size=(100, 100),
     bert_model="google/bert_uncased_L-12_H-512_A-8",
-    max_epochs=100,
+    max_epochs=15,
     profiler="advanced",
-    # checkpoint_path=str(
+    # checkpoint_path=str( ## for resuming training from a checkpoint
     #     ROOT_DIR
     #     / "logs"
     #     / "final-experiment-2"
